@@ -32,6 +32,13 @@ var ballRTCY = 30;
 var ballSpeedRTCX = ballSpeedX;
 var ballSpeedRTCY = ballSpeedY;
 var velocity = 0;
+var insured = false;
+var scoreChange = null;
+var newScore = false;
+
+if (localStorage.getItem("second")) {
+  localStorage.clear()
+}
 
 window.addEventListener('storage', (event) => {
     if (event.key == "second") {
@@ -57,11 +64,15 @@ window.addEventListener('storage', (event) => {
 })
 
 const createConnection = () => {
-    let servers = null;
+    let servers = {
+      'iceServers': [{
+        'urls': 'stun:stun.l.google.com:19302'
+      }]
+    };
     pcConstraint = null;
     dataConstraint = null;
 
-    // local
+    console.log(servers)
     connection = new RTCPeerConnection(servers, pcConstraint)
     if (!localStorage.getItem("first")) {
         sendChannel = connection.createDataChannel('sendDataChannel', dataConstraint)
@@ -90,6 +101,9 @@ const createConnection = () => {
           ballSpeedRTCX = data.ballSpeedX;
           ballSpeedRTCY = data.ballSpeedY;
           hasUpdate = true
+          if (data.insured) {
+            insured = true
+          }
         }
     }
     
@@ -164,6 +178,11 @@ const receiveChannelCallback = (event) => {
           ballSpeedRTCX = data.ballSpeedX;
           ballSpeedRTCY = data.ballSpeedY;
           hasUpdate = true
+          if (data.score) {
+            newScore = true;
+            playerScore = data.score.player
+            computerScore = data.score.enemy
+          }
         }
         receiveChannel.onclose = () => console.log("Receive Channel Closed")
         receiveChannel.onopen = () => {
@@ -205,20 +224,23 @@ function ballReset(){
 }
 
 function moveAndDrawEverything() {
-  var odd = true;
-  if (odd) {
-    getChannel().send(JSON.stringify({
-          y: isSecond ? paddle2Y : paddle1Y, 
-          velocity: velocity, 
-          ballX: ballX, 
-          ballY: ballY,
-          ballSpeedX: ballSpeedX,
-          ballSpeedY: ballSpeedY
-      }
-    ))
-    odd = false;
-  } else {
-    odd = true;
+  if (insured && scoreChange) {
+    scoreChange = null
+    insured = false
+  }
+  getChannel().send(JSON.stringify({
+        y: isSecond ? paddle2Y : paddle1Y, 
+        velocity: velocity, 
+        ballX: ballX, 
+        ballY: ballY,
+        ballSpeedX: ballSpeedX,
+        ballSpeedY: ballSpeedY,
+        score: !isSecond && scoreChange ? scoreChange : null,
+        insured: isSecond && newScore ? true : false, 
+    }
+  ))
+  if (newScore) {
+    newScore = !newScore
   }
   moveEverything();
   drawEverything();
@@ -241,9 +263,7 @@ function enemyMoves() {
     }
     
   } else {
-    
     checkY = isSecond ? paddle1Y : paddle2Y;
-    console.log("ENEMY PADDLE CACULATE" + checkY, "VELOCITY ", enemyVelocity)
     if ((checkY + enemyVelocity > 0) && (checkY + enemyVelocity < canvas.width)) {
       if (isSecond) {
         paddle1Y += enemyVelocity
@@ -266,9 +286,6 @@ function moveEverything() {
     ballSpeedY = ballSpeedRTCY;
     hasUpdate = false
   } else {
-    if (isSecond) {
-      console.log("BALL CACULATE" + ballX + " " + ballY, "VELOCITY ", ballSpeedX + " " + ballSpeedY)
-    }
     ballX = ballX + ballSpeedX;
     ballY = ballY + ballSpeedY;
   }
@@ -277,24 +294,34 @@ function moveEverything() {
     myY = isSecond ? paddle2Y : paddle1Y;
     enemyY = isSecond ? paddle1Y : paddle2Y;
     if (ballY > myY && ballY < myY+PADDLE_HEIGHT) {
-      //console.log("bounce myY, isSecond - ", isSecond, "myY", myY, "enemyY", enemyY)
       ballSpeedX = -ballSpeedX;
       var deltaY = ballY - (myY+PADDLE_HEIGHT/2)
       ballSpeedY = deltaY * 0.35
     } else {
-      isSecond ? playerScore++ : computerScore++;
+      if (!isSecond) {
+        computerScore++;
+        scoreChange = {
+          player: playerScore,
+          enemy: computerScore
+        }
+      }
       ballReset();
     }
   }
 
   if (ballX > canvas.width - PADDLE_WIDTH) {
     if (ballY > enemyY && ballY < enemyY+PADDLE_HEIGHT) {
-      //console.log("bounce enemyY, isSecond - ", isSecond, "myY", myY, "enemyY", enemyY)
       ballSpeedX = -ballSpeedX;
       var deltaY = ballY - (enemyY+PADDLE_HEIGHT/2)
       ballSpeedY = deltaY * 0.35
     } else {
-      isSecond ? computerScore++ : playerScore++;
+      if (!isSecond) {
+        playerScore++;
+        scoreChange = {
+          player: playerScore,
+          enemy: computerScore
+        }
+      }
       ballReset();
     }
   }
