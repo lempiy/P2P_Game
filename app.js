@@ -83,9 +83,8 @@ const createConnection = () => {
         sendChannel.onclose = () => console.log("Send Channel Closed")
         sendChannel.onmessage = (e) => {
           var data = JSON.parse(event.data)
-          console.log(data)
           enemyY = data.y
-          enemyVelocity = data.enemyVelocity
+          enemyVelocity = data.velocity;
           ballRTCX = data.ballX;
           ballRTCY = data.ballY;
           ballSpeedRTCX = data.ballSpeedX;
@@ -153,13 +152,13 @@ const getChannel = () => {
 
 const receiveChannelCallback = (event) => {
     if (isSecond) {
-        paddle1X = 790;
-        paddle2X = 0;
+        paddle1X = 0;
+        paddle2X = 790;
         receiveChannel = event.channel;
         receiveChannel.onmessage = (event) => {
           var data = JSON.parse(event.data)
           enemyY = data.y
-          enemyVelocity = data.enemyVelocity
+          enemyVelocity = data.velocity
           ballRTCX = data.ballX;
           ballRTCY = data.ballY;
           ballSpeedRTCX = data.ballSpeedX;
@@ -206,15 +205,21 @@ function ballReset(){
 }
 
 function moveAndDrawEverything() {
-  getChannel().send(JSON.stringify({
-        y: paddle1Y, 
-        velocity: velocity, 
-        ballX: ballX, 
-        ballY: ballY,
-        ballSpeedX: ballSpeedX,
-        ballSpeedY: ballSpeedY
-     }
-  ))
+  var odd = true;
+  if (odd) {
+    getChannel().send(JSON.stringify({
+          y: isSecond ? paddle2Y : paddle1Y, 
+          velocity: velocity, 
+          ballX: ballX, 
+          ballY: ballY,
+          ballSpeedX: ballSpeedX,
+          ballSpeedY: ballSpeedY
+      }
+    ))
+    odd = false;
+  } else {
+    odd = true;
+  }
   moveEverything();
   drawEverything();
 }
@@ -236,8 +241,9 @@ function enemyMoves() {
     }
     
   } else {
+    
     checkY = isSecond ? paddle1Y : paddle2Y;
-    console.log("hasNotUp", paddle2Y)
+    console.log("ENEMY PADDLE CACULATE" + checkY, "VELOCITY ", enemyVelocity)
     if ((checkY + enemyVelocity > 0) && (checkY + enemyVelocity < canvas.width)) {
       if (isSecond) {
         paddle1Y += enemyVelocity
@@ -254,22 +260,24 @@ var enemyY = paddle2Y;
 function moveEverything() {
   enemyMoves()
   if (isSecond && hasUpdate) {
-    console.log("sync", ballRTCX, ballRTCY)
     ballX = ballRTCX;
     ballY = ballRTCY;
     ballSpeedX = ballSpeedRTCX;
     ballSpeedY = ballSpeedRTCY;
     hasUpdate = false
   } else {
-    console.log("no sync")
+    if (isSecond) {
+      console.log("BALL CACULATE" + ballX + " " + ballY, "VELOCITY ", ballSpeedX + " " + ballSpeedY)
+    }
     ballX = ballX + ballSpeedX;
     ballY = ballY + ballSpeedY;
   }
   
-  if (ballX < 0) {
+  if (ballX < PADDLE_WIDTH) {
     myY = isSecond ? paddle2Y : paddle1Y;
     enemyY = isSecond ? paddle1Y : paddle2Y;
     if (ballY > myY && ballY < myY+PADDLE_HEIGHT) {
+      //console.log("bounce myY, isSecond - ", isSecond, "myY", myY, "enemyY", enemyY)
       ballSpeedX = -ballSpeedX;
       var deltaY = ballY - (myY+PADDLE_HEIGHT/2)
       ballSpeedY = deltaY * 0.35
@@ -279,8 +287,9 @@ function moveEverything() {
     }
   }
 
-  if (ballX > canvas.width) {
+  if (ballX > canvas.width - PADDLE_WIDTH) {
     if (ballY > enemyY && ballY < enemyY+PADDLE_HEIGHT) {
+      //console.log("bounce enemyY, isSecond - ", isSecond, "myY", myY, "enemyY", enemyY)
       ballSpeedX = -ballSpeedX;
       var deltaY = ballY - (enemyY+PADDLE_HEIGHT/2)
       ballSpeedY = deltaY * 0.35
